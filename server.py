@@ -11,6 +11,8 @@ from db import Session, User, Announcement
 app = Flask('server')
 bcrypt = Bcrypt(app)
 
+
+
 @app.errorhandler(HttpError)
 def error_handler(error: HttpError):
     http_response = jsonify({'status': 'error',
@@ -150,4 +152,9 @@ app.add_url_rule('/users', view_func=UserView.as_view('userpost'), methods=["POS
 app.add_url_rule('/announcment', view_func=AnnouncmentView.as_view('announcment'), methods=["POST"])
 app.add_url_rule('/announcment/<int:id>', view_func=AnnouncmentView.as_view('announcment_get'), methods=['GET', 'PATCH', 'DELETE'])
 
-app.run(host='127.0.0.1',port='6060')
+
+@app.route('/')
+def hello():
+    return '<h1>Hello, World!</h1>'
+
+app.run(host='0.0.0.0',port='6060')

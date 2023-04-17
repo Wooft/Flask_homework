@@ -5,7 +5,7 @@ services:
     build: .
     command: python server.py
     expose:
-      - 6060
+      - 5000
     ports:
       - 5000:6060
     networks:
