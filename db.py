@@ -3,7 +3,7 @@ from sqlalchemy import Column, String, Integer, DateTime, create_engine, Foreign
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-PG_DSN = 'postgresql://wooft:Shambala@127.0.0.1:5432/flask_db'
+PG_DSN = 'postgresql://postgres:1234@db:5432/flask_db'
 
 engine = create_engine(PG_DSN)
 
@@ -28,3 +28,5 @@ class Announcement(Base):
     description = Column(String)
     creation_time = Column(DateTime, server_default=func.now())
     owner = Column(Integer, ForeignKey(User.id))
+
+Base.metadata.create_all(bind=engine)

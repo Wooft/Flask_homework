@@ -150,4 +150,4 @@ app.add_url_rule('/users', view_func=UserView.as_view('userpost'), methods=["POS
 app.add_url_rule('/announcment', view_func=AnnouncmentView.as_view('announcment'), methods=["POST"])
 app.add_url_rule('/announcment/<int:id>', view_func=AnnouncmentView.as_view('announcment_get'), methods=['GET', 'PATCH', 'DELETE'])
 
-app.run()
+app.run(host='127.0.0.1',port='6060')

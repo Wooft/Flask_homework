@@ -30,6 +30,3 @@ def validate_create_user(json_data):
     except ValidationError as er:
         raise HttpError(status_code=400, message=er.errors())
 
-def validate_owner_announcement(json_data):
-    pass
-

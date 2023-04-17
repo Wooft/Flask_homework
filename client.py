@@ -1,9 +1,9 @@
 import requests
 
-# response = requests.post('http://127.0.0.1:5000/users',
-#                          json={'name': 'Wooft_9', 'password': 'Wd2$'})
+response = requests.post('http://0.0.0.0:5000/users',
+                         json={'name': 'Wooft', 'password': 'Wvmrmnk2@fd'})
 
-# response = requests.get('http://127.0.0.1:5000/users/12')
+# response = requests.get('http://127.0.0.1:6060/users/1')
 
 # response = requests.patch('http://127.0.0.1:5000/users/1',
 #                          json={'password': '1234'})
@@ -26,11 +26,11 @@ import requests
 #                              'description': 'Какое-то описание',
 #                              'password': '1234'
 #                          })
-response = requests.delete('http://127.0.0.1:5000/announcment/2',
-                         json={
-                             'owner': 1,
-                             'password': '1234'
-                         })
+# response = requests.delete('http://127.0.0.1:5000/announcment/2',
+#                          json={
+#                              'owner': 1,
+#                              'password': '1234'
+#                          })
 
 print(response.status_code)
 print(response.json())
