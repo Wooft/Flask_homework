@@ -1,160 +1,206 @@
-import gunicorn
-from flask import Flask, request, jsonify
-from flask.views import MethodView
-from schema import validate_create_user
-from errors import HttpError
+import json
+from aiohttp import web
 from sqlalchemy.exc import IntegrityError
-from flask_bcrypt import Bcrypt
+from bcrypt import hashpw, gensalt, checkpw
+from schema import validate_create_user
 
-from db import Session, User, Announcement
+from db import Session, User, Announcement, engine, Base
 
-app = Flask('server')
-bcrypt = Bcrypt(app)
+app = web.Application()
 
-
-
-@app.errorhandler(HttpError)
-def error_handler(error: HttpError):
-    http_response = jsonify({'status': 'error',
-                             'description': error.message})
-    http_response.status_code = error.status_code
-    return http_response
-
-def get_user(user_id: int, session: Session):
-    user = session.query(User).get(user_id)
+async def get_user(user_id: int, session: Session):
+    user = await session.get(User, user_id)
     if user is None:
-        raise HttpError(status_code=404, message='User not found')
+        raise web.HTTPNotFound(text=json.dumps({'status': 'error', 'message': 'user not found'}),
+                               content_type='application/json')
     return user
 
-def is_owner(id: int, password: str, session: Session):
-    user = get_user(user_id=id, session=session)
-    if bcrypt.check_password_hash(user.password, password):
-        return True
-    else:
-        raise HttpError(status_code=401, message='authorization data is not correct')
-
-
-def get_announcement(id: int, session: Session):
-    announcement = session.query(Announcement).get(id)
+#функция получкния объявления
+async def get_an(an_id: int, session: Session):
+    announcement = await session.get(Announcement, an_id)
+    print(announcement)
     if announcement is None:
-        raise HttpError(status_code=400, message='announcement not found')
+        raise web.HTTPNotFound(text=json.dumps({
+            'status': 'error',
+            'message': 'announcement not found'
+        }),
+        content_type='application/json')
+
+async def get_announcement(an_id: int, session: Session):
+    announcement = await session.get(Announcement, an_id)
+    if announcement is None:
+        raise web.HTTPNotFound(text=json.dumps({'status': 'error', 'message': 'Объявление не найдено'}),
+                               content_type='application/json')
     return announcement
-#Проверка наличия указания владельца объявления и пароля для запуска дальнейших действий
-def check_authorization_date(json_data):
-    if json_data.get('owner') == None or json_data.get('password') == None:
-        raise HttpError(status_code=401, message='Need owner password for this action')
-    else:
+
+async def is_owner(user_id: int, password: str, session: Session):
+    user = await session.get(User, user_id)
+    if checkpw(password.encode(), user.password.encode()):
         return True
+    else:
+        raise web.HTTPForbidden(text=json.dumps({'status': 'error',
+                                                    'message': 'incorrect authorization data'}),
+                                   content_type='application/json')
 
-class AnnouncmentView(MethodView):
+async def orm_context(app: web.Application):
+    print('START')
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
+    print('SHUTDOWN')
+@web.middleware
+async def session_middleware(request: web.Request, handler):
+    async with Session() as session:
+        request['session'] = session
+        return await handler(request)
 
-    def get(self, id: int):
-        with Session() as session:
-            announcement = get_announcement(id=id, session=session)
-            return jsonify({
-                'title': announcement.title,
-                'description': announcement.description,
-                'owner': get_user(user_id=announcement.owner, session=session).name,
-                'created_at': announcement.creation_time
+app.middlewares.append(session_middleware)
+
+class UserView(web.View):
+    async def get(self):
+        session = self.request['session']
+        user_id = int(self.request.match_info['user_id'])
+        user = await get_user(user_id, session)
+        return web.json_response({
+            'id': user.id,
+            'name': user.name,
+        })
+
+    async def post(self):
+        session = self.request['session']
+        json_data = await self.request.json()
+        #Проверка корректности воода данных
+        await validate_create_user(json_data)
+        #Хэширование пароля
+        json_data['password'] = hashpw(json_data['password'].encode(), salt=gensalt()).decode()
+        user = User(**json_data)
+        session.add(user)
+        try:
+            await session.commit()
+        #Ошибка, выбрасываемая когда добавляемый пользователь уже есть в базе
+        except IntegrityError as er:
+            raise web.HTTPConflict(text=json.dumps({
+                'Status':'error',
+                'message':'User already Exist'
+            }), content_type='application/json')
+        return web.json_response({
+            'id': user.id,
+            'name': user.name,
+        })
+    async def patch(self):
+        user_id = int(self.request.match_info['user_id'])
+        user = await get_user(user_id, self.request['session'])
+        json_data = await self.request.json()
+        #если в данных запроса есть пароль - хэшируем его
+        if 'password' in json_data:
+            json_data['password'] = hashpw(json_data['password'].encode(), salt=gensalt()).decode()
+        for field, values in json_data.items():
+            setattr(user, field, values)
+        self.request['session'].add(user)
+        await self.request['session'].commit()
+        print('Готово')
+        return web.json_response({
+            'status': 'ok'
+        })
+
+    async def delete(self):
+        pass
+
+
+class AnView(web.View):
+    async def get(self):
+        session = self.request['session']
+        an_id = int(self.request.match_info['an_id'])
+        announcement = await get_announcement(an_id, session)
+        print(announcement.title)
+        return web.json_response({
+            'title': announcement.title,
+            'description': announcement.description,
+            'time': announcement.creation_time.isoformat()
+        })
+
+    async def post(self):
+        session = self.request['session']
+        json_data = await self.request.json()
+        print(json_data)
+        announcement = Announcement(**json_data)
+        session.add(announcement)
+        try:
+            await session.commit()
+        # Ошибка, выбрасываемая когда добавляемый пользователь уже есть в базе
+        except IntegrityError as er:
+            raise web.HTTPConflict(text=json.dumps({
+                'Status': 'error',
+                'message': 'User already Exist'
+            }), content_type='application/json')
+        return web.json_response({
+            'id': announcement.id,
+            'title': announcement.title,
+            'status': 'created'
+        })
+
+    async def patch(self):
+        an_id = int(self.request.match_info['an_id'])
+        print(f"Жопа: {self.request.match_info['password']}")
+        json_data = await self.request.json()
+        user = await get_user(json_data['owner'], self.request['session'])
+        announcement = await get_announcement(an_id, self.request['session'])
+        if await is_owner(json_data['owner'], json_data['password'],self.request['session']):
+            for field, values in json_data.items():
+                setattr(announcement, field, values)
+            self.request['session'].add(user)
+            await self.request['session'].commit()
+            return web.json_response({
+                'status': 'ok'
             })
 
-    def post(self):
-        json_data = request.json
-        with Session() as session:
-            # проверка соотвествия пароля
-            if is_owner(id=json_data['owner'], password=json_data['password'], session=session):
-                json_data.pop('password') #Удаление ненужных данных для создания объявления
-                new_announcment = Announcement(**json_data)
-                session.add(new_announcment)
-                session.commit()
-                return jsonify({
-                    'title': new_announcment.title,
-                    'description': new_announcment.description,
-                    'creation_time': new_announcment.creation_time,
-                    'owner': get_user(user_id=new_announcment.owner, session=session).name,
-                })
 
-    def patch(self, id: int):
-        json_data = request.json
-        if check_authorization_date(json_data):
-            with Session() as session:
-                if is_owner(id=json_data['owner'], password=json_data['password'], session=session):
-                    announcement = get_announcement(id, session)
-                    for field, value in json_data.items():
-                        setattr(announcement, field, value)
-                    session.add(announcement)
-                    session.commit()
-            return jsonify({'status': 'success'})
-
-    def delete(self, id: int):
-        json_data = request.json
-        if check_authorization_date(json_data=json_data):
-            with Session() as session:
-                print(is_owner(id=json_data['owner'], password=json_data['password'], session=session))
-                if is_owner(id=json_data['owner'], password=json_data['password'], session=session):
-                    announcement = get_announcement(id,session)
-                    session.delete(announcement)
-                    session.commit()
-                    return jsonify({'status': f'announcement title:"{announcement.title}" has been removed'})
-
-class UserView(MethodView):
-
-    def get(self, user_id: int):
-        with Session() as session:
-            user = get_user(user_id, session)
-            return jsonify({
-                'id': user.id,
-                'Name': user.name
+    async def delete(self):
+        an_id = int(self.request.match_info['an_id'])
+        json_data = await self.request.json()
+        announcement = await get_announcement(an_id, self.request['session'])
+        if await is_owner(json_data['owner'], json_data['password'], self.request['session']):
+            await self.request['session'].delete(announcement)
+            await self.request['session'].commit()
+            return web.json_response({
+                'messahge': 'Announcement has been removed'
             })
 
-    def post(self):
-        json_data = validate_create_user(request.json)
-        json_data['password'] = bcrypt.generate_password_hash(json_data['password'].encode()).decode()
 
-        with Session() as session:
-            new_user = User(**json_data)
-            session.add(new_user)
-            try:
-                session.commit()
-            except IntegrityError:
-                raise HttpError(409, message='User already exists')
-            return jsonify(
-                {
-                    'id': new_user.id,
-                    'name': new_user.name,
-                    'password': new_user.password
-                }
-            )
+app.cleanup_ctx.append(orm_context)
 
-    def patch(self, user_id):
-        json_data = request.json
-        if json_data.get('password') != None:
-            json_data['password'] = bcrypt.generate_password_hash(json_data['password'].encode()).decode()
+app.add_routes([
+    web.get('/users/{user_id:\d+}/', UserView)
+])
 
-        with Session() as session:
-            user = get_user(user_id, session)
-            for field, value in json_data.items():
-                setattr(user, field, value)
-            session.add(user)
-            session.commit()
-        return jsonify({'status': 'success'})
+app.add_routes([
+    web.post('/users/', UserView)
+])
 
-    def delete(self, user_id):
-        with Session() as session:
-            user = get_user(user_id, session)
-            session.delete(user)
-            session.commit()
-        return jsonify({'status': 'user has been removed'})
+app.add_routes([
+    web.patch('/users/{user_id:\d+}/', UserView)
+])
 
+app.add_routes([
+    web.delete('/users/{user_id:\d+}/', UserView)
+])
 
-app.add_url_rule('/users/<int:user_id>', view_func=UserView.as_view('UsersView'), methods=['GET', 'PATCH', 'DELETE'])
-app.add_url_rule('/users', view_func=UserView.as_view('userpost'), methods=["POST"])
-app.add_url_rule('/announcment', view_func=AnnouncmentView.as_view('announcment'), methods=["POST"])
-app.add_url_rule('/announcment/<int:id>', view_func=AnnouncmentView.as_view('announcment_get'), methods=['GET', 'PATCH', 'DELETE'])
+app.add_routes([
+    web.get('/announcement/{an_id:\d+}/', AnView)
+])
 
+app.add_routes([
+    web.post('/announcement/', AnView)
+])
 
-@app.route('/')
-def hello():
-    return '<h1>Hello, World!</h1>'
+app.add_routes([
+    web.patch('/announcement/{an_id:\d+}/', AnView)
+])
 
-app.run(host='0.0.0.0',port='6060')
+app.add_routes([
+    web.delete('/announcement/{an_id:\d+}/', AnView)
+])
+
+if __name__ == '__main__':
+    web.run_app(app)

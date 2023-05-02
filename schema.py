@@ -1,32 +1,28 @@
+import json
+import pydantic.error_wrappers
 from pydantic import BaseModel, validator
-from pydantic import ValidationError
-
-from db import User
-from errors import HttpError
+from aiohttp import web
 import re
 
 PASSWORD_REGEX = re.compile(
     "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*_?])"
 )
 
-class CreateUser(BaseModel):
-
+class User(BaseModel):
     name: str
     password: str
 
     @validator('password')
-    def validate_password(cls, value: str):
+    def validate_password(cls, value):
         if not re.search(PASSWORD_REGEX, value):
-            raise ValueError('Password ist easy')
+            raise web.HTTPBadRequest(text=json.dumps({'error': 'password is too easy'}), content_type='application/json')
         if len(value) < 9:
-            raise ValueError('Password is too short')
-        return value
+            raise web.HTTPBadRequest(text=json.dumps({'error': 'password is too short'}), content_type='application/json')
 
-def validate_create_user(json_data):
 
+async def validate_create_user(json_data):
     try:
-        user_schema = CreateUser(**json_data)
+        user_schema = User(**json_data)
         return user_schema.dict()
-    except ValidationError as er:
-        raise HttpError(status_code=400, message=er.errors())
-
+    except pydantic.error_wrappers.ValidationError as er:
+        raise web.HTTPBadRequest(text=json.dumps({'error':'input data incorrect'}), content_type='application/json')

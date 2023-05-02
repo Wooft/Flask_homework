@@ -1,16 +1,15 @@
 import atexit
-from sqlalchemy import Column, String, Integer, DateTime, create_engine, ForeignKey, func
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, func
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 
-PG_DSN = 'postgresql://postgres:1234@db:5432/flask_db'
+PG_DSN = 'postgresql+asyncpg://wooft:Shambala@127.0.0.1:5432/flask_db'
 
-engine = create_engine(PG_DSN)
+engine = create_async_engine(PG_DSN)
 
 Base = declarative_base()
-Session = sessionmaker(bind=engine)
-
-atexit.register(engine.dispose)
+Session = sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
 
 class User(Base):
     __tablename__ = 'user'
@@ -27,6 +26,4 @@ class Announcement(Base):
     title = Column(String, nullable=False, index=True)
     description = Column(String)
     creation_time = Column(DateTime, server_default=func.now())
-    owner = Column(Integer, ForeignKey(User.id))
-
-Base.metadata.create_all(bind=engine)
+    owner = Column(Integer, ForeignKey(User.id), nullable=False)
