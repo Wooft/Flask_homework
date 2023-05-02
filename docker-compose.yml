@@ -7,7 +7,7 @@ services:
     expose:
       - 5000
     ports:
-      - 5000:6060
+      - 5000:8000
     networks:
       - backend
     depends_on:

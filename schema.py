@@ -19,6 +19,10 @@ class User(BaseModel):
         if len(value) < 9:
             raise web.HTTPBadRequest(text=json.dumps({'error': 'password is too short'}), content_type='application/json')
 
+class Owner(BaseModel):
+    owner: int
+    password: str
+
 
 async def validate_create_user(json_data):
     try:
@@ -26,3 +30,10 @@ async def validate_create_user(json_data):
         return user_schema.dict()
     except pydantic.error_wrappers.ValidationError as er:
         raise web.HTTPBadRequest(text=json.dumps({'error':'input data incorrect'}), content_type='application/json')
+
+async def validate_owner(json_data):
+    try:
+        owner_schema = Owner(**json_data)
+        return owner_schema
+    except pydantic.error_wrappers.ValidationError as er:
+        raise web.HTTPBadRequest(text=json.dumps({'error': 'need aothorisation information'}), content_type='application/json')

@@ -2,7 +2,7 @@ import json
 from aiohttp import web
 from sqlalchemy.exc import IntegrityError
 from bcrypt import hashpw, gensalt, checkpw
-from schema import validate_create_user
+from schema import validate_create_user, validate_owner
 
 from db import Session, User, Announcement, engine, Base
 
@@ -144,6 +144,7 @@ class AnView(web.View):
         an_id = int(self.request.match_info['an_id'])
         print(f"Жопа: {self.request.match_info['password']}")
         json_data = await self.request.json()
+        await validate_owner(json_data)
         user = await get_user(json_data['owner'], self.request['session'])
         announcement = await get_announcement(an_id, self.request['session'])
         if await is_owner(json_data['owner'], json_data['password'],self.request['session']):
@@ -159,6 +160,7 @@ class AnView(web.View):
     async def delete(self):
         an_id = int(self.request.match_info['an_id'])
         json_data = await self.request.json()
+        await validate_owner(json_data)
         announcement = await get_announcement(an_id, self.request['session'])
         if await is_owner(json_data['owner'], json_data['password'], self.request['session']):
             await self.request['session'].delete(announcement)
@@ -203,4 +205,4 @@ app.add_routes([
 ])
 
 if __name__ == '__main__':
-    web.run_app(app)
+    web.run_app(app, host='0.0.0.0', port='8000')
