@@ -19,21 +19,32 @@ class User(BaseModel):
         if len(value) < 9:
             raise web.HTTPBadRequest(text=json.dumps({'error': 'password is too short'}), content_type='application/json')
 
+class Announcement(BaseModel):
+    title: str
+    owner: int
+
+
 class Owner(BaseModel):
     owner: int
     password: str
 
+async def validate_announcement(json_data):
+    try:
+        an_shema=Announcement(**json_data)
+        return an_shema
+    except pydantic.error_wrappers.ValidationError:
+        raise web.HTTPBadRequest(text=json.dumps({'error': 'All required fields must be filled'}), content_type='application/json')
 
 async def validate_create_user(json_data):
     try:
         user_schema = User(**json_data)
         return user_schema.dict()
-    except pydantic.error_wrappers.ValidationError as er:
+    except pydantic.error_wrappers.ValidationError:
         raise web.HTTPBadRequest(text=json.dumps({'error':'input data incorrect'}), content_type='application/json')
 
 async def validate_owner(json_data):
     try:
         owner_schema = Owner(**json_data)
         return owner_schema
-    except pydantic.error_wrappers.ValidationError as er:
-        raise web.HTTPBadRequest(text=json.dumps({'error': 'need aothorisation information'}), content_type='application/json')
+    except pydantic.error_wrappers.ValidationError:
+        raise web.HTTPBadRequest(text=json.dumps({'error': 'need authorisation information'}), content_type='application/json')

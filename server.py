@@ -2,7 +2,7 @@ import json
 from aiohttp import web
 from sqlalchemy.exc import IntegrityError
 from bcrypt import hashpw, gensalt, checkpw
-from schema import validate_create_user, validate_owner
+from schema import validate_create_user, validate_owner, validate_announcement
 
 from db import Session, User, Announcement, engine, Base
 
@@ -72,6 +72,7 @@ class UserView(web.View):
         json_data = await self.request.json()
         #Проверка корректности воода данных
         await validate_create_user(json_data)
+        await validate_announcement(json_data)
         #Хэширование пароля
         json_data['password'] = hashpw(json_data['password'].encode(), salt=gensalt()).decode()
         user = User(**json_data)
@@ -123,16 +124,16 @@ class AnView(web.View):
     async def post(self):
         session = self.request['session']
         json_data = await self.request.json()
-        print(json_data)
+        await validate_announcement(json_data)
         announcement = Announcement(**json_data)
         session.add(announcement)
         try:
             await session.commit()
-        # Ошибка, выбрасываемая когда добавляемый пользователь уже есть в базе
+        #Ошибка, выбрасываемая когда добавляемый пользователь уже есть в базе
         except IntegrityError as er:
             raise web.HTTPConflict(text=json.dumps({
                 'Status': 'error',
-                'message': 'User already Exist'
+                'message': 'User not Exist'
             }), content_type='application/json')
         return web.json_response({
             'id': announcement.id,

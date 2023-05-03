@@ -1,10 +1,9 @@
-import atexit
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 
-PG_DSN = 'postgresql+asyncpg://postgres:1234@db/flask_db'
+PG_DSN = 'postgresql+asyncpg://wooft:Shambala@127.0.0.1:5432/flask_db'
 
 engine = create_async_engine(PG_DSN)
 
